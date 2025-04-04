@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Image on the left -->
+    <div class="image-container">
+      <img id="zoomableImage" [src]="imageUrl" alt="Lesion Image" class="lesion-image">
+    </div>
+  <div class="description-container" *ngIf="jsonData">
+    <div id="description" >
+      <ul>
+        <li *ngFor="let key of jsonKeyValues">
+          <strong>{{ key.key }}:</strong> {{ key.value }}
+          <button (click)="duplicateText(key.key, key.value)">Duplicate</button>
+          <input [(ngModel)]="jsonData[key.key]" placeholder="Edit {{ key.key }}" />
+        </li>             
+        <li>
+          <strong>Severity:</strong>
+          <div class="form-group">
+            <label class="radio-inline">
+              <input type="radio" name="severity" [(ngModel)]="severity" [value]="1"> 1
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="severity" [(ngModel)]="severity" [value]="2"> 2
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="severity" [(ngModel)]="severity" [value]="3"> 3
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="severity" [(ngModel)]="severity" [value]="4"> 4
+            </label>
+            <label class="radio-inline">
+              <input type="radio" name="severity" [(ngModel)]="severity" [value]="5"> 5
+            </label>
+          </div>
+        </li>
+
+        <!-- New Additional Diagnosis Field -->
+        <li>
+          <strong>Additional Diagnosis:</strong>
+          <input type="text" [(ngModel)]="additionalDiagnosis" placeholder="Add additional diagnosis">
+        </li>
+      </ul>
+    </div>
+    <!-- Save & Next Button -->
+<button (click)="saveAndNext()" class="btn-primary">Save & Next</button>
+  </div>
+</div>
+</body>
+

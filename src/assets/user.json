@@ -1,0 +1,8 @@
+[
+  { "username": "admin", "password": "admin123" },
+    { "username": "annotator1", "password": "pass123" },
+    { "username": "annotator2", "password": "annot234" },
+    { "username": "annotator3", "password": "annot345" },
+    { "username": "prn_annotator", "password": "prnannot654" }
+  ]
+  
