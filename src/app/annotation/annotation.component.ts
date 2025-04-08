@@ -5,6 +5,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TimeTrackerService } from '../time-tracker-service.service';
 import { AuthService } from '../auth.service';
+import { ActivatedRoute } from '@angular/router';
 
 interface AnnotatedData {
   [key: string]: any;
@@ -17,18 +18,18 @@ interface AnnotatedData {
   templateUrl: './annotation.component.html',
   styleUrls: ['./annotation.component.css']
 })
-export class AnnotationComponent implements OnInit, AfterViewInit {
+export class AnnotationComponent implements OnInit {
   
   jsonData: any = {};
   imageUrl: string = '';
-  assignedJsonFile: string | null = null;
-  assignedImageFile: string | null = null;
+  assignedJsonFile: string  = '';
+  assignedImageFile: string  = '';
   currentIndex = 0;
   dataList: any[] = [];
   jsonKeyValues: { key: string; value: string }[] = [];
   username: string = '';
-  annotatorId: string | null = null;
-  progress: { annotated: number, total: number, remaining: number} = {
+  annotatorId: string ='';
+  progress: { annotated: number, total: number, remaining: number, completionPercentage?: string } = {
     annotated: 0,
     total: 0,
     remaining: 0,
@@ -36,8 +37,17 @@ export class AnnotationComponent implements OnInit, AfterViewInit {
   severity: string = '';
   additionalDiagnosis: string = '';
   annotatedby: string = '';
+  annotationData: any = {};
+  currentImageIndex: number = 0;
+  images: string[] = [];
+  loading: boolean = true;
+  error: string | null = null;
+  randomData: any = null;
+  progressData: any;
+  isZoomed = false;
 
   constructor(
+    private route: ActivatedRoute,
     private authService: AuthService, 
     private annotationService: AnnotationService, 
     private http: HttpClient, 
@@ -46,84 +56,132 @@ export class AnnotationComponent implements OnInit, AfterViewInit {
 
   ngOnInit() {
     console.log('Fetching Annotator ID from localStorage...');
-    this.annotatorId = localStorage.getItem('annotatorId') || 'NOT SET';
+    this.annotatorId = localStorage.getItem('annotatorId') || 'general';
     console.log('Fetched Annotator ID:', this.annotatorId);
     this.username = localStorage.getItem('username') || 'Guest';
     
     this.timeTracker.startSessionTracking();
     
-    // Fetch annotator progress
-    this.getAnnotatorProgress();
-    
-    // Fetch a random file for the annotator
-    this.getRandomFileForAnnotator();
+    this.route.params.subscribe(params => {
+      if (params['id']) {
+        this.annotatorId = params['id'];
+        localStorage.setItem('annotatorId', this.annotatorId);
+      }
+      console.log('Using annotator ID:', this.annotatorId);
+      this.loadAllData();
+    });
+  }
 
+  toggleZoom(): void {
+    this.isZoomed = !this.isZoomed;
+  }
+
+  loadAllData(): void {
+    this.loading = true;
+    this.error = null;
+    
+    // Save annotator ID to localStorage for persistence
+    localStorage.setItem('annotatorId', this.annotatorId);
+    
+    // Load annotation data
+    this.loadAnnotationData();
+    
+    // Load progress data in parallel
+    this.getAnnotatorProgress();
   }
   
-  ngAfterViewInit() {
-    setTimeout(() => {
-      const image = document.getElementById("zoomableImage") as HTMLImageElement;
-      console.log('Image element:', image);
-      if (image) {
-        image.classList.remove("zoomed");
-
-        image.addEventListener("click", () => {
-          image.classList.toggle("zoomed");
-        });
-      }
-    }, 0);
+  loadAnnotationData(): void {
+    this.loading = true;
+    this.error = null;
+  
+    this.annotationService.getAnnotationData(this.annotatorId)
+      .subscribe({
+        next: (data) => {
+          this.annotationData = data;
+          console.log('Annotation data loaded:', data);
+  
+          // Process description
+          if (this.annotationData && this.annotationData.description) {
+            this.jsonKeyValues = Object.entries(this.annotationData.description).map(
+              ([key, value]) => ({ key, value: String(value) })
+            );            
+            this.jsonData = { ...this.annotationData.description };
+          }
+  
+          // Handle random data if available
+          if (this.annotationData.randomData) {
+            this.randomData = this.annotationData.randomData;
+            
+            if (this.randomData.jsonFiles && this.randomData.jsonFiles.length > 0) {
+              this.assignedJsonFile = this.randomData.jsonFiles[0];
+            }
+            
+            if (this.randomData.imageFiles && this.randomData.imageFiles.length > 0) {
+              this.assignedImageFile = this.randomData.imageFiles[0];
+            }
+          }
+  
+          // Process image paths if available
+          if (this.annotationData && this.annotationData.images) {
+            this.images = this.annotationData.images;
+            if (this.images.length > 0) {
+              this.loadImageData(this.images[0]);
+            }
+          }
+  
+          this.loading = false;
+        },
+        error: (err) => {
+          console.error('Error loading annotation data:', err);
+          this.error = 'Failed to load annotation data. Please try again.';
+          this.loading = false;
+        }
+      });
   }
 
+  loadImageData(imageName: string): void {
+    this.annotationService.getImageUrl(this.annotatorId, imageName)
+      .subscribe({
+        next: (blob) => {
+          this.imageUrl = URL.createObjectURL(blob);
+        },
+        error: (err) => {
+          console.error('Error loading image:', err);
+          this.error = 'Failed to load image. Please try again.';
+        }
+      });
+  }
+  
+  nextImage(): void {
+    if (this.currentImageIndex < this.images.length - 1) {
+      this.currentImageIndex++;
+      this.loadImageData(this.images[this.currentImageIndex]);
+    }
+  }
+  
+  previousImage(): void {
+    if (this.currentImageIndex > 0) {
+      this.currentImageIndex--;
+      this.loadImageData(this.images[this.currentImageIndex]);
+    }
+  }
+  
   getAnnotatorProgress() {
     if (!this.annotatorId) {
       console.error('Annotator ID is not set.');
       return;
     }
 
-    this.annotationService.getAnnotatorProgress(this.annotatorId).subscribe(
-      (progress) => {
+    this.annotationService.getAnnotatorProgress(this.annotatorId).subscribe({
+      next: (progress) => {
         console.log('Annotator progress:', progress);
         this.progress = progress;
       },
-      (error) => {
+      error: (error) => {
         console.error('Error fetching annotator progress:', error);
+        // Don't set main error to avoid blocking the UI
       }
-    );
-  }
-
-  getRandomFileForAnnotator() {
-    if (!this.annotatorId) {
-      console.error('Annotator ID is not set.');
-      return;
-    }
-
-    this.annotationService.getRandomFile(this.annotatorId).subscribe(
-      (response) => {
-        console.log('Random file assigned:', response);
-        
-        if (response.jsonFiles && response.jsonFiles.length > 0 && 
-            response.imageFiles && response.imageFiles.length > 0) {
-          
-          this.assignedJsonFile = response.jsonFiles[0];
-          this.assignedImageFile = response.imageFiles[0];
-          
-          // Load the JSON data and image only if files are assigned
-          if (this.assignedJsonFile && this.assignedImageFile) {
-            this.loadJsonData(this.assignedJsonFile);
-            this.loadImageUrl(this.assignedImageFile);
-          }
-        } else {
-          console.warn('No files available for annotation.');
-        }
-      },
-      (error) => {
-        console.error('Error fetching random file:', error);
-        if (error.status === 404) {
-          // Handle case where no more files are available
-          alert('No more files available for annotation. All files have been annotated by this annotator.');
-        }
-      }
-    );
+    });
   }
 
   loadJsonData(filename: string) {
@@ -133,8 +191,8 @@ export class AnnotationComponent implements OnInit, AfterViewInit {
       return;
     }
 
-    this.annotationService.getJsonData(baseFilename).subscribe(
-      (data) => {
+    this.annotationService.getJsonData(baseFilename, this.annotatorId || undefined).subscribe({
+      next: (data) => {
         console.log('JSON data loaded:', data);
         this.jsonData = data;
         
@@ -144,28 +202,28 @@ export class AnnotationComponent implements OnInit, AfterViewInit {
           value: typeof value === 'string' ? value : JSON.stringify(value)
         }));
       },
-      (error) => {
+      error: (error) => {
         console.error('Error loading JSON data:', error);
       }
-    );
+    });
   }
 
   loadImageUrl(filename: string) {
     const baseFilename = filename.split('/').pop();
     if (!baseFilename) {
-      console.error('Invalid image filename format');
+      console.error('Invalid filename format');
       return;
     }
-
-    this.annotationService.getImageUrl(baseFilename).subscribe(
-      (response) => {
-        console.log('Image URL loaded:', response);
-        this.imageUrl = response.imageUrl;
+    
+    this.annotationService.getImageUrl(this.annotatorId, baseFilename).subscribe({
+      next: (blob) => {
+        const imageUrl = URL.createObjectURL(blob);
+        this.imageUrl = imageUrl;
       },
-      (error) => {
-        console.error('Error loading image URL:', error);
+      error: (err) => {
+        console.error('Error loading image:', err);
       }
-    );
+    });
   }
 
   saveAnnotation() {
@@ -179,13 +237,13 @@ export class AnnotationComponent implements OnInit, AfterViewInit {
     this.jsonData.annotatedby = this.username; // Store the annotator's username
   
     const baseFilename = this.assignedJsonFile.split('/').pop() || '';
-    const annotatedFilename = baseFilename.replace('.json', '_annotated.json');
+    const annotatedFilename = baseFilename;
   
     console.log(`Saving annotation as: ${annotatedFilename} by annotator: ${this.username}`);
   
-    this.annotationService.uploadJson(this.jsonData, `${encodeURIComponent(annotatedFilename)}?annotatorId=${this.annotatorId}`)
-      .subscribe(
-        (response) => {
+    this.annotationService.uploadJson(this.jsonData, annotatedFilename, this.annotatorId)
+      .subscribe({
+        next: (response) => {
           console.log('Annotation saved successfully:', response);
           
           // Track successful save only after confirmed success
@@ -196,23 +254,111 @@ export class AnnotationComponent implements OnInit, AfterViewInit {
   
           // Fetch updated progress only after a successful save
           this.getAnnotatorProgress();
-  
-          // Then load a new random file
-          this.getRandomFileForAnnotator();
+          
+          // Load new annotation data
+          this.loadAnnotationData();
         },
-        (error) => {
+        error: (error) => {
           console.error('Error saving annotation:', error);
           // No tracking increment on error
         }
-      );
+      });
   }
   
-  
-
   saveAndNext() {
-    // this.timeTracker.trackSaveNextClick();
-    this.saveAnnotation();
+    this.submitAnnotation(this.jsonData);
   }
+
+  submitAnnotation(annotationData: any): void {
+    // Required field keys to validate
+    const requiredFields = [
+      'type_of_lesion',
+      'site',
+      'count',
+      'arrangement',
+      'size',
+      'color_pattern',
+      'border',
+      'surface_changes',
+      'presence_of_exudate_or_discharge',
+      'surrounding_skin_changes',
+      'secondary_changes',
+      'pattern_or_shape',
+      'additional_notes',
+      'overall_description'
+    ];
+    
+    if (!this.additionalDiagnosis || this.additionalDiagnosis.trim() === '') {
+      alert('Please enter a Differential Diagnosis.');
+      return;
+    }
+  
+    // Check if any required field is missing or empty
+    const missingFields = requiredFields.filter(field => {
+      const value = this.jsonData[field];
+      return value === undefined || value === null || value.toString().trim() === '';
+    });
+  
+    if (missingFields.length > 0) {
+      alert(`Please fill in all required fields: ${missingFields.join(', ')}`);
+      return;
+    }
+  
+    // Set annotation metadata
+    this.jsonData.additionalDiagnosis = this.additionalDiagnosis;
+    this.jsonData.annotatedby = this.username || 'Unknown';
+  
+    // Get the base filename from the assigned JSON file or annotation data
+    let baseFilename = '';
+  
+    if (this.assignedJsonFile) {
+      const parts = this.assignedJsonFile.split('/');
+      if (parts.length > 0) {
+        baseFilename = parts[parts.length - 1];
+      }
+    } else if (this.annotationData && this.annotationData.filename) {
+      baseFilename = this.annotationData.filename;
+    }
+  
+    if (!baseFilename) {
+      console.warn('No valid filename found, using placeholder');
+      baseFilename = `annotation_${Date.now()}.json`;
+    } else if (!baseFilename.endsWith('.json')) {
+      baseFilename = `${baseFilename}.json`;
+    }
+  
+    this.jsonData.originalFilename = baseFilename;
+  
+    console.log(`Submitting annotation for file: ${baseFilename} by annotator: ${this.annotatorId}`);
+  
+    console.log('Annotation data being sent:', JSON.stringify({
+      annotatorId: this.annotatorId,
+      annotationData: this.jsonData
+    }, null, 2));
+  
+    this.annotationService.submitAnnotation(this.annotatorId, this.jsonData)
+      .subscribe({
+        next: (response) => {
+          console.log('Annotation submitted successfully', response);
+          this.timeTracker.trackSuccessfulSave();
+  
+          // Clear form
+          this.severity = '';
+          this.additionalDiagnosis = '';
+  
+          // Update progress
+          this.getAnnotatorProgress();
+  
+          // Load new annotation
+          this.loadAnnotationData();
+        },
+        error: (err) => {
+          console.error('Error submitting annotation:', err);
+          alert(`Error submitting annotation: ${err.message || 'Unknown error'}`);
+        }
+      });
+  }
+  
 
   duplicateText(field: string, value: string) {
     if (field) {
@@ -227,7 +373,50 @@ export class AnnotationComponent implements OnInit, AfterViewInit {
 
   logout() {
     console.log('Logout button clicked');
-    this.timeTracker.stopSessionTracking();
+    // Force tracking upload on logout
+    this.timeTracker.stopSessionTracking(true);
     this.authService.logout();
+  }
+
+  markNonRelevant() {
+    // Get filename from annotationData
+    let fileName = '';
+    
+    if (this.annotationData && this.annotationData.filename) {
+      fileName = this.annotationData.filename;
+    } else if (this.assignedJsonFile) {
+      // Extract just the filename from path
+      const parts = this.assignedJsonFile.split('/');
+      if (parts.length > 0) {
+        fileName = parts[parts.length - 1];
+      }
+    }
+    
+    // Checking if username is same as annotatorId for API consistency
+    const username = this.annotatorId; // Use annotatorId instead of username
+    
+    if (!fileName || !username) {
+      console.error('Missing filename or username for marking as non-relevant');
+      alert('Unable to mark file as non-relevant: Missing filename or annotator ID');
+      return;
+    }
+    
+    console.log(`Marking file as non-relevant: ${fileName} by user: ${username}`);
+    
+    this.annotationService.markAsNonRelevant(fileName, username).subscribe({
+      next: (res) => {
+        console.log('File marked as non-relevant:', res);
+        
+        // Update progress after marking as non-relevant
+        this.getAnnotatorProgress();
+        
+        // Load new annotation data
+        this.loadAnnotationData();
+      },
+      error: (err) => {
+        console.error('Failed to mark as non-relevant', err);
+        alert(`Error marking file as non-relevant: ${err.message || 'Unknown error'}`);
+      }
+    });
   }
 }

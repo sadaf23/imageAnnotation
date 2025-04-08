@@ -9,11 +9,17 @@ export class AuthService {
   private totalTimeSpent: number = 0;
 
   private users = [
-    { username: "annotator1", password: "pass123", annotatorId: "annotator_1"  },
-    { username: "annotator2", password: "annot234", annotatorId: "annotator_2"  },
-    { username: "annotator3", password: "annot345", annotatorId: "annotator_3" },
-    { username: "prn_annotator", password: "prnannot654", annotatorId: "prn_annotator"  },
-    { username: "admin", password: "admin123" ,annotatorId: "admin" }
+    { username: "drannotatorS", password: "pass123", annotatorId: "Dr.Siddharth"  },
+    { username: "drannotatorR", password: "pass234", annotatorId: "Dr.Ruchir"  },
+    { username: "annotator3", password: "pass345", annotatorId: "general" },
+    { username: "annotator4", password: "pass456", annotatorId: "general" },
+    { username: "annotator5", password: "pass567", annotatorId: "general" },
+    { username: "annotator6", password: "pass678", annotatorId: "general" },
+    { username: "annotator7", password: "pass789", annotatorId: "general" },
+    { username: "annotator8", password: "pass890", annotatorId: "general" },
+    { username: "annotator9", password: "pass900", annotatorId: "general" },
+    { username: "annotator10", password: "pass011", annotatorId: "general" },
+    { username: "admin", password: "admin123" ,annotatorId: "general" }
   ];
   private isAuthenticated = false;
 

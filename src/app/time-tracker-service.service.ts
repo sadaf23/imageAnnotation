@@ -1,112 +1,80 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { environment } from '../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TimeTrackerService {
-  private sessionStartTime: number | null = null;
-  private lastClickTime: number | null = null;
-  private totalClicks = 0;
-  private annotationTimes: number[] = [];
+  // Use environment-based URL instead of hardcoded localhost
+  private backendUrl = 'http://localhost:8080';
+  private prodUrl = 'https://backend-268040451245.us-central1.run.app';
+  private startTime: Date | null = null;
+  private totalTimeMinutes = 0;
+  private saveCount = 0;
+  private username = '';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
-  startSessionTracking() {
-    if (this.sessionStartTime) return;  // Prevent reinitialization
-
-    this.sessionStartTime = Date.now();
-    this.lastClickTime = this.sessionStartTime;
-
-    const storedClicks = parseInt(localStorage.getItem('totalClicks') || '0', 10);
-    this.totalClicks = storedClicks;
-
-    localStorage.setItem('sessionStart', this.sessionStartTime.toString());
-    localStorage.setItem('totalClicks', this.totalClicks.toString());
-
-    console.log('Session started at:', this.formatDateTime(this.sessionStartTime));
-    console.log('Total Clicks at session start:', this.totalClicks);
+  startSessionTracking(): void {
+    this.startTime = new Date();
+    this.username = localStorage.getItem('username') || 'anonymous';
+    this.saveCount = 0;
+    console.log(`Tracking started for user: ${this.username}`);
   }
 
-  // This will be used after a successful save operation
-  trackSuccessfulSave() {
-    console.log('Before increment:', this.totalClicks);
-    this.totalClicks++;
-    console.log('After increment:', this.totalClicks);
+  trackSuccessfulSave(): void {
+    this.saveCount++;
+    console.log(`Save count: ${this.saveCount}`);
+  }
 
-    localStorage.setItem('totalClicks', this.totalClicks.toString()); // Persist clicks
-
-    if (this.lastClickTime) {
-      const timeSpent = (Date.now() - this.lastClickTime) / 1000;
-      this.annotationTimes.push(timeSpent);
-      this.lastClickTime = Date.now();
+  stopSessionTracking(forceUpload: boolean = false): void {
+    if (!this.startTime) {
+      console.warn('Tracking stop called without active tracking');
+      return;
     }
+
+    const endTime = new Date();
+    const sessionDurationMs = endTime.getTime() - this.startTime.getTime();
+    const sessionDurationMinutes = sessionDurationMs / (1000 * 60);
+    this.totalTimeMinutes += sessionDurationMinutes;
+
+    console.log(`Session ended, duration: ${sessionDurationMinutes.toFixed(2)} minutes`);
+    console.log(`Total time: ${this.totalTimeMinutes.toFixed(2)} minutes`);
+    console.log(`Total saves: ${this.saveCount}`);
+
+    // Reset tracking
+    this.startTime = null;
+
+    // Upload tracking data to server
+    this.uploadTrackingData(forceUpload);
+  }
+
+  private uploadTrackingData(forceUpload: boolean): void {
+    // Create CSV data
+    const now = new Date();
+    const timestamp = now.toISOString();
+    const csvData = `timestamp,username,duration_minutes,save_count\n${timestamp},${this.username},${this.totalTimeMinutes.toFixed(2)},${this.saveCount}`;
     
-    console.log('Successfully tracked save operation, new count:', this.totalClicks);
-  }
-
-  // Keep this method for backward compatibility
-  // but make it do nothing to prevent duplicate counting
-  trackSaveNextClick() {
-    console.log('trackSaveNextClick called but skipping counter increment. Use trackSuccessfulSave instead.');
-    // No longer incrementing click count here
-  }
-
-  stopSessionTracking() {
-    console.log('stopSessionTracking() called');
-
-    const sessionEndTime = Date.now();
-    const sessionDuration = (sessionEndTime - (this.sessionStartTime || sessionEndTime)) / 1000;
-    const username = localStorage.getItem('username') || 'Unknown';
-
-    console.log('Session duration:', sessionDuration, 'seconds');
-
-    const averageAnnotationTime = this.annotationTimes.length 
-      ? (this.annotationTimes.reduce((a, b) => a + b, 0) / this.annotationTimes.length).toFixed(2) 
-      : "N/A";
-
-    // Format login and logout times
-    const formattedStartTime = this.formatDateTime(this.sessionStartTime!);
-    const formattedEndTime = this.formatDateTime(sessionEndTime);
-
-    const csvData = `Username,Login,Logout,Annotation Count,Avg Time Per Annotation (sec)\n` +
-                    `${username},${formattedStartTime},${formattedEndTime},${this.totalClicks},${averageAnnotationTime}\n`;
-
-    console.log('CSV Data:', csvData);
-
-    this.uploadToGoogleCloud(csvData, username);
-
-    // Clear session data
-    localStorage.removeItem('sessionStart');
-    localStorage.removeItem('totalClicks');
-    localStorage.removeItem('username');
-  }
-
-  uploadToGoogleCloud(csvData: string, username: string) {
-    const backendUrl = 'http://localhost:5000/upload-tracking';
+    // Generate unique filename
+    const filename = `tracking_${this.username}_${now.getTime()}.csv`;
     
-    // Add timestamp to filename to make it unique
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `${username}_tracking_${timestamp}.csv`;
-
-    const requestBody = {
-      username: username,
-      csv: csvData,
-      filename: filename
-    };
-
-    this.http.post(backendUrl, requestBody, { responseType: 'json' }).subscribe(
-      response => console.log('Tracking data uploaded successfully:', response),
-      error => console.error('Error uploading tracking data:', error)
-    );   
-  }
-
-  // Helper function to format date as dd-MM-yyyy HH:mm
-  private formatDateTime(timestamp: number): string {
-    const date = new Date(timestamp);
-    return date.toLocaleString('en-GB', { 
-      day: '2-digit', month: '2-digit', year: 'numeric', 
-      hour: '2-digit', minute: '2-digit', hour12: false 
-    }).replace(',', '');
+    console.log('Preparing to upload tracking data:', { filename, csvData });
+    
+    // Always upload on forceUpload or if there are saves
+    if (forceUpload || this.saveCount > 0) {
+      this.http.post(`${this.prodUrl}/upload-tracking`, { csv: csvData, filename: filename })
+        .subscribe({
+          next: (response) => {
+            console.log('Tracking data uploaded successfully:', response);
+          },
+          error: (error) => {
+            console.error('Error uploading tracking data:', error);
+          }
+        });
+    } else {
+      console.log('Skipping upload - no saves recorded and not forced');
+    }
   }
 }

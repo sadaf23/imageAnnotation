@@ -6,9 +6,9 @@ import { AnnotationComponent } from './annotation/annotation.component';
 // import { PrincipleAnnotatorComponent } from './principle-annotator/principle-annotator.component';
 
 export const routes: Routes = [
-  { path: '', component: LoginComponent },
+  { path: 'login', component: LoginComponent },
   { path: 'dashboard', component: DashboardComponent },
-  { path: 'annotation', component: AnnotationComponent },
+  { path: 'annotation', component: AnnotationComponent }
   // { path: "principle-annotator", component: PrincipleAnnotatorComponent }
 ];
 

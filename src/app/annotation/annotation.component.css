@@ -4,6 +4,23 @@
     align-items: flex-start; /* Align image and text at the top */
     gap: 20px; /* Add spacing between image and description */
   }
+
+  /* .image-container {
+    overflow: hidden;
+    width: 100%;
+    max-width: 500px;
+    cursor: pointer;
+  } */
+  
+  .lesion-image {
+    width: 100%;
+    transition: transform 0.3s ease;
+  }
+  
+  .lesion-image.zoomed {
+    transform: scale(1.5); /* You can adjust the scale */
+  }
+  
   
   .image-container {
     flex: 0 0 auto; /* Prevent image from resizing */
@@ -19,7 +36,7 @@
   
   /* Ensure zoom is applied only when the class is toggled */
   .lesion-image.zoomed {
-    transform: scale(2); /* Adjust zoom level */
+    transform: scale(1.5); /* Adjust zoom level */
     max-width: none; /* Allow image to expand */
   }
   
@@ -87,6 +104,16 @@
 #description li button:hover {
     background-color: #0056b3;
 }
+
+.big-input {
+  width: 100%;         /* Make it take full width */
+  height: 120px;        /* Increase height */
+  padding: 10px 15px;  /* Add padding for content */
+  font-size: 14px;     /* Bigger text */
+  display: block;      /* Make it a block element */
+  box-sizing: border-box;
+}
+
 
 /* --- Input Field Styling --- */
 #description li input[type="text"] {
